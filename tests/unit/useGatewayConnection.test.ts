@@ -282,13 +282,13 @@ describe("useGatewayConnection", () => {
     render(createElement(Probe));
 
     await waitFor(() => {
-      expect(captured.url).toBe("ws://localhost:3000/api/gateway/ws");
+      expect(captured.url).toBe("ws://localhost:18789");
     });
     expect(captured.authScopeKey).toBe("ws://localhost:18789");
     expect(captured.clientName).toBe("openclaw-control-ui");
   });
 
-  it("does_not_auto_connect_without_a_last_known_good_state", async () => {
+  it("auto_connects_auto_managed_adapter_when_a_saved_gateway_url_exists", async () => {
     const { useGatewayConnection, captured } = await setupAndImportHook(null);
     const coordinator = {
       loadSettingsEnvelope: async () => ({
@@ -334,8 +334,77 @@ describe("useGatewayConnection", () => {
     await waitFor(() => {
       expect(screen.getByTestId("gatewayUrl")).toHaveTextContent("ws://localhost:18789");
     });
-    expect(screen.getByTestId("shouldPromptForConnect")).toHaveTextContent("yes");
-    expect(captured.url).toBeNull();
+    expect(screen.getByTestId("shouldPromptForConnect")).toHaveTextContent("no");
+    await waitFor(() => {
+      expect(captured.url).toBe("ws://localhost:18789");
+    });
+  });
+
+  it("auto_connects_sanitized_demo_gateway_settings_without_falling_back_to_openclaw", async () => {
+    const { useGatewayConnection, captured } = await setupAndImportHook(null);
+    const coordinator = {
+      loadSettingsEnvelope: async () => ({
+        settings: {
+          version: 1,
+          gateway: {
+            url: "ws://localhost:18789",
+            tokenConfigured: false,
+            adapterType: "demo",
+          },
+          focused: {},
+          avatars: {},
+          analytics: {},
+          voiceReplies: {},
+          office: {},
+          deskAssignments: {},
+          standup: {},
+          taskBoard: {},
+        },
+        localGatewayDefaults: {
+          url: "ws://localhost:18789",
+          tokenConfigured: false,
+          adapterType: "demo",
+          profiles: {
+            demo: { url: "ws://localhost:18789", tokenConfigured: false },
+          },
+        },
+      }),
+      loadSettings: async () => null,
+      schedulePatch: () => {},
+      flushPending: async () => {},
+    };
+
+    const Probe = () => {
+      const state = useGatewayConnection(coordinator);
+      return createElement(
+        "div",
+        null,
+        createElement("div", { "data-testid": "gatewayUrl" }, state.gatewayUrl),
+        createElement("div", { "data-testid": "selectedAdapterType" }, state.selectedAdapterType),
+        createElement("div", { "data-testid": "activeAdapterType" }, state.activeAdapterType),
+        createElement(
+          "div",
+          { "data-testid": "shouldPromptForConnect" },
+          state.shouldPromptForConnect ? "yes" : "no"
+        )
+      );
+    };
+
+    render(createElement(Probe));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("selectedAdapterType")).toHaveTextContent("demo");
+    });
+    expect(screen.getByTestId("gatewayUrl")).toHaveTextContent("ws://localhost:18789");
+    expect(screen.getByTestId("shouldPromptForConnect")).toHaveTextContent("no");
+    await waitFor(() => {
+      expect(captured.url).toBe("ws://localhost:18789");
+    });
+    expect(captured.authScopeKey).toBe("ws://localhost:18789");
+    expect(captured.clientName).toBe("openclaw-control-ui");
+    await waitFor(() => {
+      expect(screen.getByTestId("activeAdapterType")).toHaveTextContent("demo");
+    });
   });
 
   it("uses_a_small_initial_auto_connect_delay_for_hermes_and_demo_only", async () => {
@@ -606,8 +675,10 @@ describe("useGatewayConnection", () => {
       expect(screen.getByTestId("gatewayUrl")).toHaveTextContent("ws://localhost:18789");
     });
     expect(screen.getByTestId("selectedAdapterType")).toHaveTextContent("hermes");
-    expect(screen.getByTestId("shouldPromptForConnect")).toHaveTextContent("yes");
-    expect(captured.url).toBeNull();
+    expect(screen.getByTestId("shouldPromptForConnect")).toHaveTextContent("no");
+    await waitFor(() => {
+      expect(captured.url).toBe("ws://localhost:18789");
+    });
   });
 
   it("loads_custom_adapter_type_without_requiring_a_token", async () => {
