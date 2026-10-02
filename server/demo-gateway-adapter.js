@@ -8,35 +8,73 @@ const ADAPTER_PORT = parseInt(process.env.DEMO_ADAPTER_PORT || "18789", 10);
 const MAIN_KEY = "main";
 const MODELS = [{ id: "demo/mock-office", name: "Mock Office", provider: "demo" }];
 
-const agents = new Map([
-  [
-    "demo-orchestrator",
-    {
-      id: "demo-orchestrator",
-      name: "Avery",
-      role: "Orchestrator",
-      workspace: "/demo/orchestrator",
-    },
-  ],
-  [
-    "demo-researcher",
-    {
-      id: "demo-researcher",
-      name: "Mika",
-      role: "Research",
-      workspace: "/demo/research",
-    },
-  ],
-  [
-    "demo-builder",
-    {
-      id: "demo-builder",
-      name: "Rune",
-      role: "Builder",
-      workspace: "/demo/builder",
-    },
-  ],
-]);
+const CMIG_DEMO_WORKFORCE = [
+  {
+    id: "donna-coordinator",
+    name: "Donna",
+    role: "CMIG Coordinator",
+    workspace: "/cmig/donna",
+    emoji: "🧭",
+  },
+  {
+    id: "claude-ui",
+    name: "Claude",
+    role: "UI / Frontend",
+    workspace: "/cmig/claude-ui",
+    emoji: "🎨",
+  },
+  {
+    id: "codex-engineer",
+    name: "Codex",
+    role: "Engineering / Code",
+    workspace: "/cmig/codex-engineer",
+    emoji: "🛠️",
+  },
+  {
+    id: "jev-risk",
+    name: "Jev",
+    role: "Risk + Confidence Scoring",
+    workspace: "/cmig/jev-risk",
+    emoji: "🛡️",
+  },
+  {
+    id: "hermes-orchestrator",
+    name: "Hermes",
+    role: "Workflow Orchestration",
+    workspace: "/cmig/hermes-orchestrator",
+    emoji: "☤",
+  },
+  {
+    id: "dealeros-bot",
+    name: "DealerOS",
+    role: "GM Knowledge System",
+    workspace: "/cmig/dealeros",
+    emoji: "📚",
+  },
+  {
+    id: "vato-bot",
+    name: "VatoBot",
+    role: "Vehicle Appraisal",
+    workspace: "/cmig/vatobot",
+    emoji: "🚗",
+  },
+  {
+    id: "listingtracker-bot",
+    name: "ListingTracker",
+    role: "Listing Intelligence",
+    workspace: "/cmig/listingtracker",
+    emoji: "📡",
+  },
+  {
+    id: "salesboard-bot",
+    name: "Salesboard",
+    role: "Sales Performance",
+    workspace: "/cmig/salesboard",
+    emoji: "📈",
+  },
+];
+
+const agents = new Map(CMIG_DEMO_WORKFORCE.map((agent) => [agent.id, { ...agent }]));
 
 const files = new Map();
 const sessionSettings = new Map();
@@ -84,7 +122,7 @@ function agentListPayload() {
     id: agent.id,
     name: agent.name,
     workspace: agent.workspace,
-    identity: { name: agent.name, emoji: "🤖" },
+    identity: { name: agent.name, emoji: agent.emoji || "🤖" },
     role: agent.role,
   }));
 }
@@ -94,12 +132,14 @@ function buildDemoReply(agent, message) {
   const compactMessage = normalized.replace(/\s+/g, " ").trim();
   const greetingOnly = /^(hi|hello|hey|yo|sup|what'?s up|how are you)[!.? ]*$/i.test(compactMessage);
   const opening =
-    agent.role === "Orchestrator"
-      ? `${agent.name} here. Demo office is live and the team is synced.`
-      : `${agent.name} checking in from the ${agent.role.toLowerCase()} desk.`;
+    agent.role === "CMIG Coordinator"
+      ? `${agent.name} here. CMIG demo office is live and the team is synced.`
+      : agent.role === "Risk + Confidence Scoring"
+        ? `${agent.name} here. I am watching risk, approvals, and confidence gates.`
+        : `${agent.name} checking in from the ${agent.role.toLowerCase()} desk.`;
   if (greetingOnly) {
-    return agent.role === "Orchestrator"
-      ? `${opening} I can coordinate the room, sketch a plan, or hand work to Research and Builder.`
+    return agent.role === "CMIG Coordinator"
+      ? `${opening} I can route work to Claude, Codex, Jev, Hermes, or the project bots.`
       : `${opening} Give me a concrete task and I will respond in-character with a focused next step.`;
   }
   const focusLine =
@@ -107,11 +147,17 @@ function buildDemoReply(agent, message) {
       ? `${compactMessage.slice(0, 160).trimEnd()}...`
       : compactMessage;
   const action =
-    agent.role === "Research"
-      ? "I would turn this into source checks, constraints, and follow-up questions."
-      : agent.role === "Builder"
-        ? "I would translate this into implementation steps, edge cases, and validation."
-        : "I would route the work, keep the team aligned, and summarize the next move.";
+    agent.role.includes("Frontend")
+      ? "I would translate this into a polished interface, interaction states, and visual QA checks."
+      : agent.role.includes("Engineering")
+        ? "I would turn this into code changes, tests, edge cases, and validation steps."
+        : agent.role.includes("Risk")
+          ? "I would score readiness, name the gates, and call out what still needs approval."
+          : agent.role.includes("Knowledge")
+            ? "I would map this into operating standards, references, and reusable dealership guidance."
+            : agent.role.includes("Appraisal")
+              ? "I would turn this into valuation checks, recon risk, and deal-desk notes."
+              : "I would route the work, keep the team aligned, and summarize the next move.";
   return `${opening} Focus: ${focusLine}. ${action}`;
 }
 
@@ -120,7 +166,7 @@ async function handleMethod(method, params, id, sendEvent) {
 
   switch (method) {
     case "agents.list":
-      return resOk(id, { defaultId: "demo-orchestrator", mainKey: MAIN_KEY, agents: agentListPayload() });
+      return resOk(id, { defaultId: "donna-coordinator", mainKey: MAIN_KEY, agents: agentListPayload() });
 
     case "agents.create": {
       const name = typeof p.name === "string" && p.name.trim() ? p.name.trim() : "Demo Agent";
@@ -152,7 +198,7 @@ async function handleMethod(method, params, id, sendEvent) {
 
     case "agents.delete": {
       const agentId = typeof p.agentId === "string" ? p.agentId.trim() : "";
-      if (agentId && agents.has(agentId) && agentId !== "demo-orchestrator") {
+      if (agentId && agents.has(agentId) && agentId !== "donna-coordinator") {
         agents.delete(agentId);
         clearHistory(sessionKeyFor(agentId));
       }
@@ -160,13 +206,13 @@ async function handleMethod(method, params, id, sendEvent) {
     }
 
     case "agents.files.get": {
-      const key = `${p.agentId || "demo-orchestrator"}/${p.name || ""}`;
+      const key = `${p.agentId || "donna-coordinator"}/${p.name || ""}`;
       const content = files.get(key);
       return resOk(id, { file: content !== undefined ? { content } : { missing: true } });
     }
 
     case "agents.files.set": {
-      const key = `${p.agentId || "demo-orchestrator"}/${p.name || ""}`;
+      const key = `${p.agentId || "donna-coordinator"}/${p.name || ""}`;
       files.set(key, typeof p.content === "string" ? p.content : "");
       return resOk(id, {});
     }
@@ -247,7 +293,7 @@ async function handleMethod(method, params, id, sendEvent) {
     }
 
     case "sessions.patch": {
-      const key = typeof p.key === "string" ? p.key : sessionKeyFor("demo-orchestrator");
+      const key = typeof p.key === "string" ? p.key : sessionKeyFor("donna-coordinator");
       const current = sessionSettings.get(key) || {};
       const next = { ...current };
       if (p.model !== undefined) next.model = p.model;
@@ -262,15 +308,15 @@ async function handleMethod(method, params, id, sendEvent) {
     }
 
     case "sessions.reset": {
-      const key = typeof p.key === "string" ? p.key : sessionKeyFor("demo-orchestrator");
+      const key = typeof p.key === "string" ? p.key : sessionKeyFor("donna-coordinator");
       clearHistory(key);
       return resOk(id, { ok: true });
     }
 
     case "chat.send": {
-      const sessionKey = typeof p.sessionKey === "string" ? p.sessionKey : sessionKeyFor("demo-orchestrator");
-      const agentId = sessionKey.startsWith("agent:") ? sessionKey.split(":")[1] : "demo-orchestrator";
-      const agent = agents.get(agentId) || agents.get("demo-orchestrator");
+      const sessionKey = typeof p.sessionKey === "string" ? p.sessionKey : sessionKeyFor("donna-coordinator");
+      const agentId = sessionKey.startsWith("agent:") ? sessionKey.split(":")[1] : "donna-coordinator";
+      const agent = agents.get(agentId) || agents.get("donna-coordinator");
       const message = typeof p.message === "string" ? p.message.trim() : String(p.message || "").trim();
       const runId = typeof p.idempotencyKey === "string" && p.idempotencyKey ? p.idempotencyKey : randomId();
       if (!message) return resOk(id, { status: "no-op", runId });
@@ -358,7 +404,7 @@ async function handleMethod(method, params, id, sendEvent) {
     }
 
     case "chat.history": {
-      const sessionKey = typeof p.sessionKey === "string" ? p.sessionKey : sessionKeyFor("demo-orchestrator");
+      const sessionKey = typeof p.sessionKey === "string" ? p.sessionKey : sessionKeyFor("donna-coordinator");
       return resOk(id, { sessionKey, messages: getHistory(sessionKey) });
     }
 
@@ -479,9 +525,9 @@ function startAdapter() {
                 agents: [...agents.values()].map((agent) => ({
                   agentId: agent.id,
                   name: agent.name,
-                  isDefault: agent.id === "demo-orchestrator",
+                  isDefault: agent.id === "donna-coordinator",
                 })),
-                defaultAgentId: "demo-orchestrator",
+                defaultAgentId: "donna-coordinator",
               },
               sessionDefaults: { mainKey: MAIN_KEY },
             },
